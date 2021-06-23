@@ -14,30 +14,55 @@ import sys
 import os
 from audioread.exceptions import NoBackendError
 
-if __name__ == '__main__':
-    ## Info & args
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument("-e", "--enc_model_fpath", type=Path, 
-                        default="encoder/saved_models/pretrained.pt",
-                        help="Path to a saved encoder")
-    parser.add_argument("-s", "--syn_model_fpath", type=Path, 
-                        default="synthesizer/saved_models/pretrained/pretrained.pt",
-                        help="Path to a saved synthesizer")
-    parser.add_argument("-v", "--voc_model_fpath", type=Path, 
-                        default="vocoder/saved_models/pretrained/pretrained.pt",
-                        help="Path to a saved vocoder")
-    parser.add_argument("--cpu", action="store_true", help=\
-        "If True, processing is done on CPU, even when a GPU is available.")
-    parser.add_argument("--no_sound", action="store_true", help=\
-        "If True, audio won't be played.")
-    parser.add_argument("--seed", type=int, default=None, help=\
-        "Optional random number seed value to make toolbox deterministic.")
-    parser.add_argument("--no_mp3_support", action="store_true", help=\
-        "If True, disallows loading mp3 files to prevent audioread errors when ffmpeg is not installed.")
-    args = parser.parse_args()
-    print_args(args, parser)
+# Info and command-line args
+parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("-e", "--enc_model_fpath", type=Path, 
+                    default="encoder/saved_models/pretrained.pt",
+                    help="Path to a saved encoder")
+parser.add_argument("-s", "--syn_model_fpath", type=Path, 
+                    default="synthesizer/saved_models/pretrained/pretrained.pt",
+                    help="Path to a saved synthesizer")
+parser.add_argument("-v", "--voc_model_fpath", type=Path, 
+                    default="vocoder/saved_models/pretrained/pretrained.pt",
+                    help="Path to a saved vocoder")
+parser.add_argument("--cpu", action="store_true", help=\
+    "If True, processing is done on CPU, even when a GPU is available.")
+parser.add_argument("--no_sound", action="store_true", help=\
+    "If True, audio won't be played.")
+parser.add_argument("--seed", type=int, default=None, help=\
+    "Optional random number seed value to make toolbox deterministic.")
+parser.add_argument("--no_mp3_support", action="store_true", help=\
+    "If True, disallows loading mp3 files to prevent audioread errors when ffmpeg is not installed.")
+args = parser.parse_args()
+print_args(args, parser)
+
+# Initialize global variables
+synthesizer = None
+
+def test_and_load_models():
+    '''
+    Tests the paths to our models and loads them
+    '''
+
+    # Check if pretrained models are downloaded
+    check_model_paths(encoder_path=args.enc_model_fpath,
+                      synthesizer_path=args.syn_model_fpath,
+                      vocoder_path=args.voc_model_fpath)
+
+    # Load the models one by one.
+    print("Preparing the encoder, the synthesizer and the vocoder...")
+    encoder.load_model(args.enc_model_fpath)
+    global synthesizer
+    synthesizer = Synthesizer(args.syn_model_fpath)
+    vocoder.load_model(args.voc_model_fpath)
+
+
+def configure_runtime():
+    '''
+    Configures the runtime based on command-line args
+    '''
+
     if not args.no_sound:
         import sounddevice as sd
 
@@ -46,15 +71,14 @@ if __name__ == '__main__':
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
     if not args.no_mp3_support:
-        try:
-            librosa.load("samples/1320_00000.mp3")
-        except NoBackendError:
-            print("Librosa will be unable to open mp3 files if additional software is not installed.\n"
-                  "Please install ffmpeg or add the '--no_mp3_support' option to proceed without support for mp3 files.")
-            exit(-1)
-        
-    print("Running a test of your configuration...\n")
-        
+            try:
+                librosa.load("samples/1320_00000.mp3")
+            except NoBackendError:
+                print("Librosa will be unable to open mp3 files if additional software is not installed.\n"
+                    "Please install ffmpeg or add the '--no_mp3_support' option to proceed without support for mp3 files.")
+                exit(-1)
+
+    print('Running a test of your configuration...')
     if torch.cuda.is_available():
         device_id = torch.cuda.current_device()
         gpu_properties = torch.cuda.get_device_properties(device_id)
@@ -69,20 +93,21 @@ if __name__ == '__main__':
             gpu_properties.total_memory / 1e9))
     else:
         print("Using CPU for inference.\n")
-    
-    ## Remind the user to download pretrained models if needed
+
+    test_and_load_models()
+
+    # Check if pretrained models are downloaded
     check_model_paths(encoder_path=args.enc_model_fpath,
                       synthesizer_path=args.syn_model_fpath,
                       vocoder_path=args.voc_model_fpath)
-    
-    ## Load the models one by one.
+
+    # Load the models one by one.
     print("Preparing the encoder, the synthesizer and the vocoder...")
     encoder.load_model(args.enc_model_fpath)
     synthesizer = Synthesizer(args.syn_model_fpath)
     vocoder.load_model(args.voc_model_fpath)
-    
-    
-    ## Run a test
+
+    # Run a test of the configuration
     print("Testing your configuration with small inputs.")
     # Forward an audio waveform of zeroes that lasts 1 second. Notice how we can get the encoder's
     # sampling rate, which may differ.
@@ -93,7 +118,7 @@ if __name__ == '__main__':
     # to an audio of 1 second.
     print("\tTesting the encoder...")
     encoder.embed_utterance(np.zeros(encoder.sampling_rate))
-    
+
     # Create a dummy embedding. You would normally use the embedding that encoder.embed_utterance
     # returns, but here we're going to make one ourselves just for the sake of showing that it's
     # possible.
@@ -107,7 +132,7 @@ if __name__ == '__main__':
     texts = ["test 1", "test 2"]
     print("\tTesting the synthesizer... (loading the model will output a lot of text)")
     mels = synthesizer.synthesize_spectrograms(texts, embeds)
-    
+
     # The vocoder synthesizes one waveform at a time, but it's more efficient for long ones. We 
     # can concatenate the mel spectrograms to a single one.
     mel = np.concatenate(mels, axis=1)
@@ -122,16 +147,20 @@ if __name__ == '__main__':
     # that has a detrimental effect on the quality of the audio. The default parameters are 
     # recommended in general.
     vocoder.infer_waveform(mel, target=200, overlap=50, progress_callback=no_action)
-    
+
     print("All test passed! You can now synthesize speech.\n\n")
-    
-    
+
+
+def run_interactive_demo():
+    '''
+    Runs an interactive demo of the voice cloner
+    '''
     ## Interactive speech generation
     print("This is a GUI-less example of interface to SV2TTS. The purpose of this script is to "
           "show how you can interface this project easily with your own. See the source code for "
           "an explanation of what is happening.\n")
     
-    print("Interactive generation loop")
+    print("Interactive generation loop starting")
     num_generated = 0
     while True:
         try:
@@ -223,3 +252,7 @@ if __name__ == '__main__':
         except Exception as e:
             print("Caught exception: %s" % repr(e))
             print("Restarting\n")
+
+if __name__ == "__main__":
+    configure_runtime()
+    run_interactive_demo()
