@@ -28,7 +28,8 @@ parser.add_argument("-v", "--voc_model_fpath", type=Path,
                     help="Path to a saved vocoder")
 parser.add_argument("--cpu", action="store_true", help=\
     "If True, processing is done on CPU, even when a GPU is available.")
-parser.add_argument("--no_sound", action="store_true", help=\
+parser.add_argument("--no_sound", action="store_false", help=\
+
     "If True, audio won't be played.")
 parser.add_argument("--seed", type=int, default=None, help=\
     "Optional random number seed value to make toolbox deterministic.")
