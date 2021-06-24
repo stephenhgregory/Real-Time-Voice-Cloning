@@ -182,13 +182,14 @@ def run_interactive_demo():
             # - If the wav is already loaded:
             original_wav, sampling_rate = librosa.load(str(in_fpath))
             preprocessed_wav = encoder.preprocess_wav(original_wav, sampling_rate)
-            print("Loaded file succesfully")
+            print("Loaded file successfully")
             
             # Then we derive the embedding. There are many functions and parameters that the 
             # speaker encoder interfaces. These are mostly for in-depth research. You will typically
             # only use this function (with its default parameters):
+            print('Creating embedding...')
             embed = encoder.embed_utterance(preprocessed_wav)
-            print("Created the embedding")
+            print("Embedding created!")
             
             
             ## Generating the spectrogram
